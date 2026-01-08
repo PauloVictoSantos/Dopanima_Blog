@@ -5,16 +5,20 @@ export class CreatePostController {
   async create(req: Request, res: Response) {
     try {
       const repository = new CreatePostRepository();
-      const postId = await repository.create(req.body);
+
+      const files = req.files as Express.Multer.File[];
+
+      const postId = await repository.create(req.body, files);
 
       return res.status(201).json({
         message: "Post criado com sucesso",
         post_id: postId,
       });
 
-    } catch (error) {
-      return res.status(400).json({
-        message: "Uma ou mais categorias não existem",
+    } catch (error: any) {
+      return res.status(error.statusCode || 500).json({
+        error: true,
+        message: error.message || "Erro interno do servidor",
       });
     }
   }

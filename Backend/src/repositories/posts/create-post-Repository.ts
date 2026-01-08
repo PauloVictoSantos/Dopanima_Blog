@@ -1,20 +1,31 @@
 import { db } from "../../database/db";
 import { Post } from "../../models/Post";
 import { ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import slugify from "slugify";
+import { AppError } from "../../errors/AppError";
 
 export class CreatePostRepository {
-  async create(post: Post): Promise<number> {
+  async create(
+    post: Post,
+    files: Express.Multer.File[]
+  ): Promise<number> {
     const conn = await db.getConnection();
 
     try {
       await conn.beginTransaction();
+
+      const slug = `${slugify(post.title, {
+        lower: true,
+        strict: true,
+      })}-${Date.now()}`;
+
       const [result] = await conn.execute<ResultSetHeader>(
         `INSERT INTO posts 
-        (title, slug, excerpt, content, published, user_id) 
-        VALUES (?, ?, ?, ?, ?, ?)`,
+         (title, slug, excerpt, content, published, user_id) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
         [
           post.title,
-          post.slug,
+          slug,
           post.excerpt,
           post.content,
           post.published,
@@ -24,6 +35,27 @@ export class CreatePostRepository {
 
       const postId = result.insertId;
 
+      // 🔹 salvar imagens
+      if (files && files.length > 0) {
+        for (const file of files) {
+          await conn.query(
+            `INSERT INTO images 
+             (post_id, filename, original_name, mime_type, size, url, is_cover)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+              postId,
+              file.filename,
+              file.originalname,
+              file.mimetype,
+              file.size,
+              `/uploads/posts/${file.filename}`,
+              false,
+            ]
+          );
+        }
+      }
+
+      // 🔹 categorias
       if (post.categories && post.categories.length > 0) {
         const categories = post.categories.map(Number);
 
@@ -33,12 +65,13 @@ export class CreatePostRepository {
         );
 
         if (categoryRows.length !== categories.length) {
-          throw new Error("Uma ou mais categorias não existem");
+          throw new AppError("Uma ou mais categorias não existem", 400);
         }
 
-        const categoryValues = categories.map(
-          (categoryId) => [postId, categoryId]
-        );
+        const categoryValues = categories.map((categoryId) => [
+          postId,
+          categoryId,
+        ]);
 
         await conn.query(
           "INSERT INTO post_categorys (post_id, category_id) VALUES ?",
@@ -46,6 +79,7 @@ export class CreatePostRepository {
         );
       }
 
+      // 🔹 tags
       if (post.tags && post.tags.length > 0) {
         const tags = post.tags.map(Number);
 
@@ -55,12 +89,10 @@ export class CreatePostRepository {
         );
 
         if (tagRows.length !== tags.length) {
-          throw new Error("Uma ou mais tags não existem");
+          throw new AppError("Uma ou mais tags não existem", 400);
         }
 
-        const tagValues = tags.map(
-          (tagId) => [postId, tagId]
-        );
+        const tagValues = tags.map((tagId) => [postId, tagId]);
 
         await conn.query(
           "INSERT INTO post_tags (post_id, tag_id) VALUES ?",

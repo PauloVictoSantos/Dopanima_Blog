@@ -19,7 +19,7 @@ export class GetPostController {
     const post = await repository.findById(id);
 
     if (!post) {
-      return res.status(404).json({ message: "Post não encontrado" });
+      return res.status(404).json({ message: "Post não encontrado!" });
     }
 
     return res.json(post);

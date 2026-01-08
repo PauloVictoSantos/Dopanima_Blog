@@ -7,7 +7,7 @@ export class UpdatePostController {
   async update(req: Request, res: Response) {
     await repository.update(Number(req.params.id), req.body);
     return res.status(204).send({
-      menssage: "Post Alerado com sucesso!"
+      menssage: "Post alterado com sucesso!"
     });
   }
 }
